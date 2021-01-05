@@ -54,8 +54,15 @@ for item in array5:
 array = np.reshape(array, (50000, 3, 32, 32))
 
 test_array = test_data[b'data']
-test_array = np.reshape(test_array, (10000, 3, 32, 32))
-
+test_array_final = []
+for item in test_array:
+    test_array_final.append(item)
+test_array_final = np.reshape(test_array_final, (10000, 3, 32, 32))
+'''print("TRAIN ARRAY SHAPE")
+print(array[:10])
+print("TEST ARRAY SHAPE")
+print(test_array_final[:10])
+'''
 images = []
 test_images = []
 for item in array:
@@ -64,7 +71,7 @@ for item in array:
 for item in images:
     item = cv2.cvtColor(item, cv2.COLOR_RGB2BGR)
 
-for item in test_array:
+for item in test_array_final:
     test_images.append(np.transpose(item, (1,2,0)))
 
 for item in test_images:
@@ -122,15 +129,15 @@ def fd_hog(image):
 global_features = []
 labels = []
 
-for i in range(1000):
+for i in range(len(images)):
     curr_image = cv2.resize(images[i], fixed_size)
 
     fv_hu_moments = fd_hu_moments(curr_image)
     fv_haralick_texture = fd_haralick_texture(curr_image)
-    fv_color_histogram = fd_color_histogram(curr_image)
+    #fv_color_histogram = fd_color_histogram(curr_image)
     fv_hog = fd_hog(curr_image)
 
-    global_feature = np.hstack([fv_color_histogram, fv_haralick_texture, fv_hu_moments, fv_hog])
+    global_feature = np.hstack([fv_haralick_texture, fv_hu_moments, fv_hog])
 
     labels.append(train_labels[cifar_labels[i]])
     global_features.append(global_feature)
@@ -150,11 +157,16 @@ target      = le.fit_transform(labels)
 #Now that we have the features we can scale them
 scaler = MinMaxScaler(feature_range=(0, 1))
 rescaled_features = scaler.fit_transform(global_features)
+#print("FEATURES BEFORE SCALING")
+#print(global_features)
+#print("SHAPE OF FEATURES")
+#print(rescaled_features.shape)
+#print(rescaled_features)
 
 #print("[STATUS] target labels: {}".format(target))
 #print("[STATUS] target labels shape: {}".format(target.shape))
 
-num_trees = 1000
+num_trees = 100
 test_size = 0.10
 seed      = 9
 
@@ -180,33 +192,48 @@ print("\n Training RFC...")
 tik = time.perf_counter()
 clf  = RandomForestClassifier(n_estimators=num_trees, random_state=seed)
 
+#print("RESCALED FEATURES TYPE: " + str(rescaled_features.dtype))
+#print(target)
 clf.fit(rescaled_features, target)
 tok = time.perf_counter()
 print(f"Training finished in {tok-tik:0.4f} seconds")
+
+#test_images_array = np.array(test_images)
+#test_images_array = test_images_array.astype("float32")
 
 for image in test_images:
     curr_image = cv2.resize(image, fixed_size)
 
     fv_hu_moments = fd_hu_moments(curr_image)
     fv_haralick_texture = fd_haralick_texture(curr_image)
-    fv_color_histogram = fd_color_histogram(curr_image)
+    #fv_color_histogram = fd_color_histogram(curr_image)
     fv_hog = fd_hog(curr_image)
 
-    global_feature = np.hstack([fv_color_histogram, fv_haralick_texture, fv_hu_moments, fv_hog])
-    #global_feature = global_feature.reshape(-1,2)
-    #print(global_feature)
+    global_feature = np.hstack([fv_haralick_texture, fv_hu_moments, fv_hog])
+    #print("GLOBAL FEATURE SHAPE")
+    #print(global_feature.shape)
+    global_feature = global_feature.reshape(-1,1)
+    #print("AFTER RESHAPE")
+    #print(global_feature.shape)
+    #print(global_feature[:10])
 
     # scale features in the range (0-1)
-    scaler = MinMaxScaler(feature_range=(0, 1))
-    rescaled_feature = scaler.fit_transform(global_feature.reshape(-1,1))
+    #scaler_test = MinMaxScaler(feature_range=(0, 1))
+    #rescaled_feature = scaler_test.fit_transform(global_feature.reshape(1,-1))
     #print(rescaled_feature)
+    #print("SHAPE OF TEST FEATURE")
+    #print(global_feature.shape)
+    #print("AFTER RESHAPE")
+    global_feature = global_feature.reshape(1,-1)
+    #print(global_feature.shape)
 
     # predict label of test image
-    prediction = clf.predict(rescaled_feature.reshape(1,-1))[0]
+    #rescaled_feature = rescaled_feature.astype("float32")
+    prediction = clf.predict(global_feature)[0]
     print(prediction)
 
     # show predicted label on image
-    cv2.putText(curr_image, train_labels[prediction], (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,255,255), 3)
+    cv2.putText(curr_image, train_labels[prediction], (20,30), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,255,255), 1)
 
     # display the output image
     plt.imshow(cv2.cvtColor(curr_image, cv2.COLOR_BGR2RGB))
